@@ -45,6 +45,16 @@ amp <- read_csv(file = "amp_clean.csv")
 glimpse(amp)
 
 # 'data.frame':	49 obs. of  16 variables:
+
+## But I think we need to repeat the analysis only with lakes that have been checked in 21st century. So we filter the dataset
+checkedLakes <- unique(amp$Lake_code[which(amp$Period == "P2")])
+
+ampFull <- amp
+amp <- ampFull %>% filter (Lake_code %in% checkedLakes)
+
+length(unique(amp$Lake_code))
+
+
 ```
 
 ## Data exploration
@@ -119,6 +129,9 @@ table(amp$Rel_amp)
 # 0  1  2  3 
 # 8  8  6 27 
 
+ # 0  1  2  3 
+ # 7 11 25 28 
+
 table(amp$PC)
 # OK
 
@@ -145,11 +158,11 @@ amp %>% ggplot(aes(Rel_amp)) +
 
 #COLLINEARITY
 # a summary using the ggpairs command from the GGally library
-amp %>% 
-  ggpairs(columns = c("Year", "PC_amp", "PC_amp", "PC",
-                      "Area", "Depth_max", "Depth_ave", "Flow"), 
-          aes(alpha = 0.8), lower = list(combo = wrap("facethist", binwidth = 2))) + 
-  My_theme
+# amp %>% 
+#   ggpairs(columns = c("Year", "PC_amp", "PC_amp", "PC",
+#                       "Area", "Depth_max", "Depth_ave", "Flow"), 
+#           aes(alpha = 0.8), lower = list(combo = wrap("facethist", binwidth = 2))) + 
+#   My_theme
 
 # PC_amp and PC_amp correlated (use PC instead)
 # Average and max depth correlated (use one or the other)
@@ -344,7 +357,22 @@ summary(CMP1)
 
 drop1(CMP1)
 
+##or updated model with 26 lakes only
 # Single term deletions
+# 
+# Model:
+# Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC + 
+#     (1 | fLake)
+#             Df    AIC
+# <none>         256.92
+# Period       1 232.68
+# logFlow.std  1 244.93
+# logArea.std  1 367.53
+# aDepth.std   1 263.02
+# PC           1 228.51
+
+
+# Single term deletions with the full dataset of 46 lakes
 # Model:
 # Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC + 
 #     (1 | fLake)
@@ -364,6 +392,30 @@ CMP2 <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std +
 
 summary(CMP2)
 
+# Formula:          Rel_amp ~ Period + logFlow.std + aDepth.std + (1 | fLake)
+# Data: amp
+# 
+#      AIC      BIC   logLik deviance df.resid 
+#    179.8    193.4    -83.9    167.8       65 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance Std.Dev.
+#  fLake  (Intercept) 0.02269  0.1506  
+# Number of obs: 71, groups:  fLake, 26
+# 
+# Dispersion parameter for compois family (): 0.205 
+# 
+# Conditional model:
+#             Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)  1.50652    0.05797  25.988  < 2e-16 ***
+# PeriodP2    -0.17122    0.06373  -2.687  0.00722 ** 
+# logFlow.std  0.11426    0.04344   2.630  0.00853 ** 
+# aDepth.std   0.22418    0.04438   5.052 4.37e-07 ***
+
+## Or for the model with 46 lakes
+
 #      AIC      BIC   logLik deviance df.resid 
 #      212      227     -100      200       84 
 # 
@@ -382,6 +434,39 @@ summary(CMP2)
 # PeriodP2    -0.13480    0.05835  -2.310  0.02087 *  
 # logFlow.std  0.11023    0.03642   3.027  0.00247 ** 
 # aDepth.std   0.24434    0.03799   6.432 1.26e-10 ***
+
+#or if we include PC species 
+CMP3 <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + PC +
+                          (1|fLake),
+                           compois(link = "sqrt"),
+                           data = amp)
+
+summary(CMP3)
+
+## MAssive change in AIC compared to CMP2
+# Formula:          Rel_amp ~ Period + logFlow.std + aDepth.std + PC + (1 | fLake)
+# Data: amp
+# 
+#      AIC      BIC   logLik deviance df.resid 
+#    367.5    383.4   -176.8    353.5       64 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance Std.Dev.
+#  fLake  (Intercept) 0.9897   0.9948  
+# Number of obs: 71, groups:  fLake, 26
+# 
+# Dispersion parameter for compois family (): 1.62 
+# 
+# Conditional model:
+#              Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)  0.868192   0.215439   4.030 5.58e-05 ***
+# PeriodP2     0.041293   0.166930   0.247    0.805    
+# logFlow.std -0.037741   0.208591  -0.181    0.856    
+# aDepth.std   0.006943   0.209693   0.033    0.974    
+# PCpresent    1.259619   0.241983   5.205 1.94e-07 ***
+
 
 
 # Plot the residuals vs fitted values.
