@@ -1,0 +1,565 @@
+---
+    title: "Analysis of Mysis relicta occurrence in Lithuania"
+author: "Carl Smith, Asta Audzijonyte, Kestutis Arbaciauskas"
+date: "2022-09-06"
+output: html_document
+---
+
+## Libraries
+    
+```{r message=FALSE}
+library(tidyverse)
+library(lattice)
+library(sp)
+library(gstat)
+library(ggplot2)
+library(fields)
+library(dplyr)
+library(tidyr)
+library(performance)
+library(see)
+library(devtools)
+library(outliers)
+library(car)
+library(effects)
+library(lme4)
+library(nlme)
+library(glmmTMB)
+library(lmerTest)
+library(MuMIn)
+library(performance)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(gridExtra)
+library(GGally)
+library(plyr)
+library(DHARMa)
+```
+
+## Read in the data
+
+```{r}
+# Import dataframe
+amp <- read_csv(file = "amp_clean.csv")
+glimpse(amp)
+
+# 'data.frame':	49 obs. of  16 variables:
+```
+
+## Data exploration
+
+```{r}
+#Any NAs
+colSums(is.na(amp))
+# No
+
+# OUTLIERS
+
+# Define preferred figure format
+My_theme <- theme(axis.text.y = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  axis.ticks.x = element_blank(),
+                  panel.background = element_blank(),
+           panel.border = element_rect(fill = NA, size = 1),
+                  strip.background = element_rect(fill = "white", 
+                                                 color = "white", size = 1),
+                              text = element_text(size = 14),
+                panel.grid.major = element_line(colour = "white", size = 0.1),
+                panel.grid.minor = element_line(colour = "white", size = 0.1))
+
+# A function for dotplots
+multi_dotplot <- function(filename, Xvar, Yvar){
+  filename %>%
+    ggplot(aes(x = {{Xvar}})) +
+    geom_point(aes(y = {{Yvar}})) +
+    theme_bw() +
+    coord_flip() +
+    labs(x = "Order of Data")}
+
+#Add ordered observations
+amp <- amp %>%
+  mutate(order = seq(1:nrow(amp)))
+
+#Select continuous variables to plot
+p1 <- multi_dotplot(amp, order, Year)
+p2 <- multi_dotplot(amp, order, Rel_amp)
+p3 <- multi_dotplot(amp, order, Rel_amp)
+p4 <- multi_dotplot(amp, order, PC_amp)
+p5 <- multi_dotplot(amp, order, PC_amp)
+p6 <- multi_dotplot(amp, order, Area)
+p7 <- multi_dotplot(amp, order, Depth_max)
+p8 <- multi_dotplot(amp, order, Depth_ave)
+p9 <- multi_dotplot(amp, order, Flow)
+
+#Plot as a grid
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
+
+# 1. PC_amp and PC_amp have a lot of zeros
+# 2. Area and flow with serious outliers
+# 3. Rel_amp could have a problem with zero inflation
+
+# Are data balanced among levels of the categorical covariates?
+
+amp$fLake <- as.factor(amp$Lake_abbr)
+table(amp$fLake)
+# OK
+
+table(amp$Year)
+# Not great
+
+table(amp$Period)
+# Good
+
+table(amp$B_amp)
+# 0  1 
+# 8 41
+
+table(amp$Rel_amp)
+# 0  1  2  3 
+# 8  8  6 27 
+
+table(amp$PC)
+# OK
+
+######################################
+#NUMBER OF ZEROS IN THE RESPONSE VARIABLES
+
+# What is the percentage of zeros for response variables?
+
+sum(amp$Rel_amp == 0)
+# 7 zeros
+
+######################################
+
+#NORMALITY AND HOMOGENEITY OF DEPENDENT VARIABLE(S)
+
+# Frequency polygon plot - Rel_amp
+amp %>% ggplot(aes(Rel_amp)) +
+  geom_freqpoly( bins = 3) +
+  labs(x = "Relic ampid abundance", y = "Frequency") +
+  My_theme +
+  theme(panel.border = element_rect(colour = "black", 
+                                    fill=NA, size = 1))
+
+
+#COLLINEARITY
+# a summary using the ggpairs command from the GGally library
+amp %>% 
+  ggpairs(columns = c("Year", "PC_amp", "PC_amp", "PC",
+                      "Area", "Depth_max", "Depth_ave", "Flow"), 
+          aes(alpha = 0.8), lower = list(combo = wrap("facethist", binwidth = 2))) + 
+  My_theme
+
+# PC_amp and PC_amp correlated (use PC instead)
+# Average and max depth correlated (use one or the other)
+
+#####################################
+
+#PLOT RELATIONSHIPS
+
+# Plot response variable against covariates
+par(mfrow=c(2,3), mar=c(5,5,1,1), cex.lab = 1)
+plot(Rel_amp ~ Area,  data = amp,
+     xlab = "Area",
+     ylab = "Rel_amp",
+     pch = 16, cex = 1.3)
+
+plot(Rel_amp ~ Flow,  data = amp,
+     xlab = "Flow",
+     ylab = "Rel_amp",
+     pch = 16, cex = 1.3)
+
+plot(Rel_amp ~ Depth_max,  data = amp,
+     xlab = "Max depth",
+     ylab = "Rel_amp",
+     pch = 16, cex = 1.3)
+
+plot(Rel_amp ~ Depth_ave,  data = amp,
+     xlab = "Ave depth",
+     ylab = "Rel_amp",
+     pch = 16, cex = 1.3)
+
+plot(Rel_amp ~ Year,  data = amp,
+     xlab = "Year",
+     ylab = "Rel_amp",
+     pch = 16, cex = 1.3)
+
+# Any evidence of interactions
+ggplot(amp, aes(x = Flow, y = Rel_amp)) +
+  geom_point(colour = 'gray44') +
+  geom_smooth(method = 'lm', colour = 'black', se = FALSE) +
+  theme(panel.background = element_blank()) +
+  theme(panel.border = element_rect(fill = NA, size = 1)) +
+  theme(strip.background = element_rect(fill = "white", 
+                                        color = "white", size = 1)) +
+  theme(text = element_text(size=16)) +
+  facet_wrap(~PC)
+
+ggplot(amp, aes(x = Depth_ave, y = Rel_amp)) +
+  geom_point(colour = 'gray44') +
+  geom_smooth(method = 'lm', colour = 'black', se = FALSE) +
+  theme(panel.background = element_blank()) +
+  theme(panel.border = element_rect(fill = NA, size = 1)) +
+  theme(strip.background = element_rect(fill = "white", 
+                                        color = "white", size = 1)) +
+  theme(text = element_text(size=16)) +
+  facet_wrap(~PC)
+
+ggplot(amp, aes(x = Depth_max, y = Rel_amp)) +
+  geom_point(colour = 'gray44') +
+  geom_smooth(method = 'lm', colour = 'black', se = FALSE) +
+  theme(panel.background = element_blank()) +
+  theme(panel.border = element_rect(fill = NA, size = 1)) +
+  theme(strip.background = element_rect(fill = "white", 
+                                        color = "white", size = 1)) +
+  theme(text = element_text(size=16)) +
+  facet_wrap(~PC)
+
+
+ggplot(amp, aes(x = Area, y = Rel_amp)) +
+  geom_point(colour = 'gray44') +
+  geom_smooth(method = 'lm', colour = 'black', se = FALSE) +
+  theme(panel.background = element_blank()) +
+  theme(panel.border = element_rect(fill = NA, size = 1)) +
+  theme(strip.background = element_rect(fill = "white", 
+                                        color = "white", size = 1)) +
+  theme(text = element_text(size=16)) +
+  facet_wrap(~PC)
+
+ggplot(amp, aes(x = Year, y = Rel_amp)) +
+  geom_point(colour = 'gray44') +
+  geom_smooth(method = 'lm', colour = 'black', se = FALSE) +
+  theme(panel.background = element_blank()) +
+  theme(panel.border = element_rect(fill = NA, size = 1)) +
+  theme(strip.background = element_rect(fill = "white", 
+                                        color = "white", size = 1)) +
+  theme(text = element_text(size=16)) +
+  facet_wrap(~PC)
+
+# Temporal pattern?
+ggplot() +
+  geom_point(data = amp, 
+                    aes(y = Rel_amp, x = Year),
+                    shape = 16, 
+                    size = 2)# +
+  # facet_wrap( ~ Lake_abbr, scales = "fixed")
+
+# Check temporal autocorrelation with ACF plot
+B0 <- gls(B_amp ~ Year, 
+          data = amp,
+          na.action = na.omit,
+          method = "REML")
+
+par(mfrow = c(1,1), 
+    cex.lab = 1.5, 
+    mar = c(5,5,2,2), 
+    cex.main = 1.5)
+
+E0Full <- rep(NA, nrow(amp))
+I      <- is.na(amp$Year) | is.na(amp$B_amp)
+E0     <- resid(B0, type = "n")
+E0Full[!I] <- E0
+
+acf(E0Full, na.action = na.pass)
+# No evidence of autocorrelation based on ACF plot
+
+```
+### What variables predict presence/abundance of relic amphipods?
+
+ Data exploration shows:
+
+ -Outliers in Area and Flow
+ -Zeros in the response variable
+ -Imbalance in Ponto-Caspian ampacean abundance
+ -Collinearity with average and maximum depth, PC amp and amp
+ -No obviously strong interactions
+ -Same sites sampled on multiple occasions (dependency)
+
+Next steps:
+
+ 1. log transform flow and area
+ 2. Standardize variables for computational efficiency
+ 3. fit GLMM (lake as random intercept)
+ 4. model presence/absence with Bernoulli distribution
+
+### Log transorm and standardise data
+
+```{r}
+
+# 1. log transform flow and area to improve distribution
+amp$logArea <- log10(amp$Area)
+amp$logFlow <- log10(amp$Flow)
+
+p1 <- multi_dotplot(amp, order, Area)
+p2 <- multi_dotplot(amp, order, logArea)
+p3 <- multi_dotplot(amp, order, Flow)
+p4 <- multi_dotplot(amp, order, logFlow)
+
+#Plot as a grid
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+
+# Log transformation gives best distribution of these covariates
+
+##############################################
+
+# 2. Standardize variables for computational efficieny
+amp$Year.std    <- (amp$Year-mean(amp$Year))/sd(amp$Year)
+amp$logFlow.std <- (amp$logFlow-mean(amp$logFlow))/sd(amp$logFlow)
+amp$logArea.std <- (amp$logArea-mean(amp$logArea))/sd(amp$logArea)
+amp$aDepth.std  <- (amp$Depth_ave-mean(amp$Depth_ave))/sd(amp$Depth_ave)
+amp$mDepth.std  <- (amp$Depth_max-mean(amp$Depth_max))/sd(amp$Depth_max)
+
+```
+
+## Fit a model and explore 
+
+```{r}
+
+CMP1 <- glmmTMB(Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC +
+                          (1|fLake),
+                          compois(link = "sqrt"),
+                          data = amp)
+summary(CMP1)
+#      AIC      BIC   logLik deviance df.resid 
+#    331.3    351.3   -157.6    315.3       82 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance Std.Dev.
+#  fLake  (Intercept) 0.6697   0.8184  
+# Number of obs: 90, groups:  fLake, 45
+# 
+# Dispersion parameter for compois family (): 0.226 
+# 
+# Conditional model:
+#             Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)  0.96357    0.13813   6.976 3.04e-12 ***
+# PeriodP2    -0.10196    0.08427  -1.210    0.226    
+# logFlow.std  0.09542    0.14529   0.657    0.511    
+# logArea.std -0.14004    0.13321  -1.051    0.293    
+# aDepth.std  -0.06046    0.13650  -0.443    0.658    
+# PCpresent   -0.02737    0.13126  -0.209    0.835    
+
+drop1(CMP1)
+
+# Single term deletions
+# Model:
+# Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC + 
+#     (1 | fLake)
+#             Df    AIC
+# <none>         331.29
+# Period       1 259.09
+# logFlow.std  1 329.43
+# logArea.std  1 312.83
+# aDepth.std   1 439.86
+# PC           1 248.11
+
+# The optimal model is
+CMP2 <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + 
+                          (1|fLake),
+                           compois(link = "sqrt"),
+                           data = amp)
+
+summary(CMP2)
+
+#      AIC      BIC   logLik deviance df.resid 
+#      212      227     -100      200       84 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance Std.Dev.
+#  fLake  (Intercept) 0.02031  0.1425  
+# Number of obs: 90, groups:  fLake, 45
+# 
+# Dispersion parameter for compois family (): 0.193 
+# 
+# Conditional model:
+#             Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)  1.39898    0.04431  31.576  < 2e-16 ***
+# PeriodP2    -0.13480    0.05835  -2.310  0.02087 *  
+# logFlow.std  0.11023    0.03642   3.027  0.00247 ** 
+# aDepth.std   0.24434    0.03799   6.432 1.26e-10 ***
+
+
+# Plot the residuals vs fitted values.
+par(mfrow = c(1,1), mar = c(5,5,2,2))
+E1 <- resid(CMP2, type = "pearson")
+F1 <- fitted(CMP2)
+plot(x = F1, 
+     y = E1,
+     xlab = "Fitted values",
+     ylab = "Pearson residuals",
+     pch = 16, cex.lab = 1.5)
+abline(0, 0, lty = 2)
+# OK
+
+# Plot the residuals vs parameters in the model
+par(mfrow = c(1,3), mar = c(5,5,2,2))
+
+#Flow
+plot(x = amp$logFlow.std, 
+     y = E1,
+     xlab = "Standardised flow",
+     ylab = "Pearson residuals", 
+     pch = 16, cex.lab = 1.5)
+abline(0,0, lty=2)
+
+#Average depth
+plot(x = amp$aDepth.std, 
+     y = E1,
+     xlab = "Average depth",
+     ylab = "Pearson residuals", 
+     pch = 16, cex.lab = 1.5)
+abline(0,0, lty=2)
+
+#Period
+boxplot(E1 ~ Period, data = amp,
+        xlab = "Period",
+        ylab = "",
+        range=0,
+        pch = 16, cex.lab = 1.5)
+abline(0,0, lty=2)
+# They are fine
+
+# Variables not in the model
+par(mfrow = c(1,3), mar = c(5,5,2,2))
+
+# Plot the residuals vs ave depth
+plot(x = amp$mDepth.std, 
+     y = E1,
+     xlab = "Standardised max depth",
+     ylab = "Pearson residuals", 
+     pch = 16, cex.lab = 1.5)
+abline(0,0, lty=2)
+
+# Plot the residuals vs area
+plot(x = amp$logArea.std, 
+     y = E1,
+     xlab = "Standardised log area",
+     ylab = "Pearson residuals", 
+     pch = 16, cex.lab = 1.5)
+abline(0,0, lty=2)
+# OK
+
+#Period
+boxplot(E1 ~ PC, data = amp,
+        xlab = "PC",
+        ylab = "",
+        range=0,
+        pch = 16, cex.lab = 1.5)
+abline(0,0, lty=2)
+# They are fine
+
+# Assess spatial dependency
+# Sample-variogram
+mydata <- data.frame(E1, amp$Lat, amp$Lon)
+coordinates(mydata) <- c("amp.Lat", "amp.Lon")
+V1 <- variogram(E1 ~ 1, mydata, cutoff = 2)
+plot(V1, pch = 16, col = 1, cex = 1.5,
+     xlab = list(label = "Distance", cex = 1.5),
+     ylab = list(label = "Semi-variance", cex = 1.5) )
+# No obvious spatial trend
+
+```
+
+### Plot model 
+
+```{r}
+# Plot fixed effects
+set_theme(
+  base = theme_bw(),
+  axis.textsize = 1)
+plot_model(CMP2, vline.color = "red", 
+           sort.est = FALSE, 
+           show.values = TRUE)
+# Good
+
+# Random effects
+plot_model(CMP2, vline.color = "green", type = "re")
+# Quite limited lake effects
+
+# Model predictions
+set_theme(
+  axis.ticksize.x = 0.5,
+  axis.ticksize.y = 0.5,
+  axis.textsize.x = 0.5,
+  axis.textsize.y = 0.5,
+  axis.linecolor = "black", 
+  axis.textcolor = "black",
+  axis.tickslen = 0.2,
+  axis.title.size = 0.9,
+  axis.title.color = "black",
+  axis.textsize = 0.8,
+  geom.outline.size = 1,
+  legend.pos = "bottom",
+  legend.title.face = "italic",
+  legend.backgroundcol = "white",
+  legend.item.backcol = "white",
+  legend.item.bordercol = "white",
+  base = theme_blank())
+
+# Define preferred figure format
+My_theme <- theme(panel.background = element_blank(),
+                  panel.border = element_rect(fill = NA, size = 1),
+                  strip.background = element_rect(fill = "white", 
+                                                  color = "white", size = 1),
+                  text = element_text(size = 14),
+                  panel.grid.major = element_line(colour = "white", size = 0.1),
+                  panel.grid.minor = element_line(colour = "white", size = 0.1))
+
+
+# Plot model
+
+# log flow
+plot2 <- plot_model(CMP2,
+                    type = "pred", 
+                    terms = c("logFlow.std [all]", "Period"),
+                    colors = c("blue", "firebrick2", "green2"),
+                    show.data = T,
+                    pred.type = c("fe"),
+                    title = "",
+                    show.legend = TRUE,
+                    jitter = 0.5,
+                    axis.title = c("Log flowthrough (standardised)",
+                                   "Relative abundance of glacial relict amphipods"),
+                    show.values = F) + My_theme
+# average depth
+plot3 <- plot_model(CMP2,
+                    type = "pred", 
+                    terms = c("aDepth.std [all]", "Period"),
+                    colors = c("blue", "firebrick2", "green2"),
+                    show.data = T,
+                    pred.type = c("fe"),
+                    title = "",
+                    show.legend = TRUE,
+                    jitter = 0.5,
+                    axis.title = c("Average depth (standardised)",
+                                   ""),
+                    show.values = F) + My_theme
+
+grid.arrange(plot2, plot3, nrow = 1)
+
+# Model summary
+summary(CMP2)
+
+#              Estimate Std. Error z value Pr(>|z|)    
+#(Intercept)   1.39898    0.04431  31.576  < 2e-16 ***
+# PeriodP2    -0.13480    0.05835  -2.310  0.02087 *  
+# logFlow.std  0.11023    0.03642   3.027  0.00247 ** 
+# aDepth.std   0.24434    0.03799   6.432 1.26e-10 ***
+
+tab_model(CMP2,
+          show.zeroinf = F,
+          dv.labels = c("Conway-Maxwell Poisson GLMM (relic amphipods)"),
+          string.pred = "Coefficient",
+          string.ci = "Conf. Int (95%)",
+          string.p = "P-value",
+          p.style = c("numeric"),
+          emph.p = FALSE,
+          transform = NULL,
+          file = "amp.doc")
+
+```
