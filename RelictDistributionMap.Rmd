@@ -1,0 +1,100 @@
+---
+title: "Reliktai"
+author: "Augustas"
+date: '2022-11-04'
+output: html_document
+---
+
+## Libraries
+
+```{r}
+library(tidyverse)
+library(magick)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(rgeos)
+library(png)
+library(grid)
+library(dplyr)
+library(stringi)
+library(readxl)
+library(purrr)
+library(lubridate)
+library(tidyverse)
+library(ggpubr)
+
+pacman::p_load(
+    ggsn, #to add scale bars
+    #mapview, # to save maps from leaflet
+    cowplot, rnaturalearth, tidyverse,here, skimr, sf, leaflet, mapview, readxl, ggmap, effects, MuMIn, grid)
+
+```
+
+## Data
+
+```{r}
+
+relict <-read.csv("relictData.csv")
+
+#Define the box and download a map
+bbox <- c(left = 21, bottom = 53.5, right = 27, top = 56.5)
+#stamen2 <- get_stamenmap(bbox, zoom = 7, maptype = "terrain-background", color = "bw", force = TRUE)
+#saveRDS(stamen, file = 'lithuania.rds')
+#saveRDS(stamen2, file = 'lithuania2.rds')
+
+read_rds(file = 'lithuania2.rds')
+
+```
+
+```{r}
+
+#filter data sets
+relict$Pallasea <- as.factor(relict$Pallasea)
+m_relicta <- relict %>% filter(Mrelicta > 0) 
+m_relicta$Mrelicta <- as.factor(m_relicta$Mrelicta)
+monoporeia <- relict %>% filter(Maffinis == 1)
+
+p1 <- ggmap(stamen2)
+p1
+
+relicta <- p1 +   
+ geom_point(data= m_relicta, aes(x = Lon, y = Lat, color= Mrelicta), shape=16, size = 2) +
+      scale_color_manual(values = c("black", "orange"),
+                     labels=c("absent", "present"),
+                     guides(name = "Mysis:")) +
+ geom_text(x=22.8, y=53.7, label= "M. relicta, M. affinis", size = 5, fontface = 3) + 
+ geom_point(data= monoporeia, aes(x = Lon, y = Lat), shape=8, size = 2) +
+ #  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x =element_blank(),
+    axis.text.y =element_text(size=8)
+  )
+relicta
+
+pallasea <- p1 +   
+ geom_point(data= relict, aes(x = Lon, y = Lat, color= Pallasea), shape=16, size = 2) +
+      scale_color_manual(values = c("black", "orange", "lightblue"),
+                     labels=c("absent", "present", "unknown")) +
+ geom_text(x=22.5, y=53.7, label= "P. quadrispinosa", size = 5, fontface = 3) + 
+ #  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text=element_text(size=8)
+  )
+pallasea
+
+ggarrange(relicta, pallasea,
+          labels = c("A", "B"),
+          ncol = 1, nrow = 2)
+
+
+```
+
