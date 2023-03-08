@@ -44,8 +44,6 @@ library(DHARMa)
 amp <- read_csv(file = "amp_clean.csv")
 glimpse(amp)
 
-# 'data.frame':	49 obs. of  16 variables:
-
 ## But I think we need to repeat the analysis only with lakes that have been checked in 21st century. So we filter the dataset
 checkedLakes <- unique(amp$Lake_code[which(amp$Period == "P2")])
 
@@ -53,6 +51,10 @@ ampFull <- amp
 amp <- ampFull %>% filter (Lake_code %in% checkedLakes)
 
 length(unique(amp$Lake_code))
+glimpse(amp)
+
+#three lakes checked with handnet only
+three_lakes <- c("Gals", "Galv","Vist")
 
 
 ```
@@ -112,6 +114,7 @@ grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
 # Are data balanced among levels of the categorical covariates?
 
 amp$fLake <- as.factor(amp$Lake_abbr)
+ampFull$fLake <- as.factor(ampFull$Lake_abbr)
 table(amp$fLake)
 # OK
 
@@ -259,7 +262,7 @@ ggplot() +
   # facet_wrap( ~ Lake_abbr, scales = "fixed")
 
 # Check temporal autocorrelation with ACF plot
-B0 <- gls(B_amp ~ Year, 
+B0 <- gls(Rel_amp ~ Year, 
           data = amp,
           na.action = na.omit,
           method = "REML")
@@ -270,15 +273,16 @@ par(mfrow = c(1,1),
     cex.main = 1.5)
 
 E0Full <- rep(NA, nrow(amp))
-I      <- is.na(amp$Year) | is.na(amp$B_amp)
+I      <- is.na(amp$Year) | is.na(amp$Rel_amp)
 E0     <- resid(B0, type = "n")
 E0Full[!I] <- E0
 
 acf(E0Full, na.action = na.pass)
-# No evidence of autocorrelation based on ACF plot
+# No strong evidence of autocorrelation based on ACF plot
 
 ```
-### What variables predict presence/abundance of relic amphipods?
+
+ What variables predict presence/abundance of relic amphipods?
 
  Data exploration shows:
 
@@ -296,13 +300,16 @@ Next steps:
  3. fit GLMM (lake as random intercept)
  4. model presence/absence with Bernoulli distribution
 
-### Log transorm and standardise data
+## Log transorm and standardise data
 
 ```{r}
 
 # 1. log transform flow and area to improve distribution
 amp$logArea <- log10(amp$Area)
 amp$logFlow <- log10(amp$Flow)
+
+ampFull$logArea <- log10(ampFull$Area)
+ampFull$logFlow <- log10(ampFull$Flow)
 
 p1 <- multi_dotplot(amp, order, Area)
 p2 <- multi_dotplot(amp, order, logArea)
@@ -316,163 +323,293 @@ grid.arrange(p1, p2, p3, p4, nrow = 2)
 
 ##############################################
 
-# 2. Standardize variables for computational efficieny
+# 2. Standardize variables for computational deficiency
 amp$Year.std    <- (amp$Year-mean(amp$Year))/sd(amp$Year)
 amp$logFlow.std <- (amp$logFlow-mean(amp$logFlow))/sd(amp$logFlow)
 amp$logArea.std <- (amp$logArea-mean(amp$logArea))/sd(amp$logArea)
 amp$aDepth.std  <- (amp$Depth_ave-mean(amp$Depth_ave))/sd(amp$Depth_ave)
 amp$mDepth.std  <- (amp$Depth_max-mean(amp$Depth_max))/sd(amp$Depth_max)
 
+ampFull$Year.std    <- (ampFull$Year-mean(ampFull$Year))/sd(ampFull$Year)
+ampFull$logFlow.std <- (ampFull$logFlow-mean(ampFull$logFlow))/sd(ampFull$logFlow)
+ampFull$logArea.std <- (ampFull$logArea-mean(ampFull$logArea))/sd(ampFull$logArea)
+ampFull$aDepth.std  <- (ampFull$Depth_ave-mean(ampFull$Depth_ave))/sd(ampFull$Depth_ave)
+ampFull$mDepth.std  <- (ampFull$Depth_max-mean(ampFull$Depth_max))/sd(ampFull$Depth_max)
+dim(amp)
+dim(ampFull)
+
+#create a dataset with three lakes excluded (those sampled with a handnet)
+ampTest <- amp %>% filter (!Lake_abbr %in% three_lakes)
+dim(ampTest)
+length(unique(amp$Lake_code))
+length(unique(ampTest$Lake_code))
+
 ```
 
-## Fit a model and explore 
+## Find an optimal model
 
 ```{r}
 
-CMP1 <- glmmTMB(Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC +
+#first with the main sample size of lakes that have been assessed both in 20th and 21st centuries - dataset 'amp'
+AM1 <- glmmTMB(Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC +
+                          (1|fLake),
+                          compois(link = "log"),
+                          data = amp)
+
+drop1(AM1)
+
+#             Df    AIC
+# <none>         188.51
+# Period       1 188.79
+# logFlow.std  1 191.16
+# logArea.std  1 186.54 <- drop
+# aDepth.std   1 203.28
+# PC           1 186.68 <- this one is also very close in terms of their AIC value
+
+#or do the same but with the maximum depth 
+AM1max <- glmmTMB(Rel_amp ~ Period + logFlow.std + logArea.std + mDepth.std + PC +
+                          (1|fLake),
+                          compois(link = "log"),
+                          data = amp)
+
+drop1(AM1max)
+#             Df    AIC
+# <none>         192.03
+# Period       1 193.15
+# logFlow.std  1 194.25
+# logArea.std  1 190.26 <- this one is also very close in terms of their AIC value
+# mDepth.std   1 203.28
+# PC           1 190.18 <- drop
+
+#results with max and average depths are very similar, but average depths gives lower AIC values so we go with them. The average depth model suggested we drop lake are first
+
+AM1a <- glmmTMB(Rel_amp ~ Period + logFlow.std + PC + aDepth.std +
+                 (1|fLake),
+               compois(link = "log"),
+               data = amp)
+
+drop1(AM1a)
+#             Df    AIC
+# <none>         186.54
+# Period       1 186.93
+# logFlow.std  1 190.04
+# PC           1 184.68 <- drop
+# aDepth.std   1 202.11
+
+AM1b <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std +
+                  (1|fLake),
+                compois(link = "log"),
+                data = amp)
+
+drop1(AM1b)
+#             Df    AIC
+# <none>         184.68 <- cannot improve fit by dropping further variables as this value is lowest
+# Period       1 186.81
+# logFlow.std  1 188.04
+# aDepth.std   1 200.11
+
+
+# Improve fit with different link function?
+AM1c <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std +
                           (1|fLake),
                           compois(link = "sqrt"),
                           data = amp)
-summary(CMP1)
-#      AIC      BIC   logLik deviance df.resid 
-#    331.3    351.3   -157.6    315.3       82 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance Std.Dev.
-#  fLake  (Intercept) 0.6697   0.8184  
-# Number of obs: 90, groups:  fLake, 45
-# 
-# Dispersion parameter for compois family (): 0.226 
-# 
-# Conditional model:
-#             Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)  0.96357    0.13813   6.976 3.04e-12 ***
-# PeriodP2    -0.10196    0.08427  -1.210    0.226    
-# logFlow.std  0.09542    0.14529   0.657    0.511    
-# logArea.std -0.14004    0.13321  -1.051    0.293    
-# aDepth.std  -0.06046    0.13650  -0.443    0.658    
-# PCpresent   -0.02737    0.13126  -0.209    0.835    
 
-drop1(CMP1)
-
-##or updated model with 26 lakes only
-# Single term deletions
-# 
-# Model:
-# Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC + 
-#     (1 | fLake)
-#             Df    AIC
-# <none>         256.92
-# Period       1 232.68
-# logFlow.std  1 244.93
-# logArea.std  1 367.53
-# aDepth.std   1 263.02
-# PC           1 228.51
-
-
-# Single term deletions with the full dataset of 46 lakes
-# Model:
-# Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC + 
-#     (1 | fLake)
-#             Df    AIC
-# <none>         331.29
-# Period       1 259.09
-# logFlow.std  1 329.43
-# logArea.std  1 312.83
-# aDepth.std   1 439.86
-# PC           1 248.11
+AIC(AM1b, AM1c)
+#      df      AIC
+# AM1b  6 184.6772
+# AM1c  6 179.8158 <- better fit
 
 # The optimal model is
-CMP2 <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + 
+AM2 <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + 
                           (1|fLake),
-                           compois(link = "sqrt"),
-                           data = amp)
-
-summary(CMP2)
-
-# Formula:          Rel_amp ~ Period + logFlow.std + aDepth.std + (1 | fLake)
-# Data: amp
-# 
-#      AIC      BIC   logLik deviance df.resid 
-#    179.8    193.4    -83.9    167.8       65 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance Std.Dev.
-#  fLake  (Intercept) 0.02269  0.1506  
-# Number of obs: 71, groups:  fLake, 26
-# 
-# Dispersion parameter for compois family (): 0.205 
-# 
-# Conditional model:
-#             Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)  1.50652    0.05797  25.988  < 2e-16 ***
-# PeriodP2    -0.17122    0.06373  -2.687  0.00722 ** 
-# logFlow.std  0.11426    0.04344   2.630  0.00853 ** 
-# aDepth.std   0.22418    0.04438   5.052 4.37e-07 ***
-
-## Or for the model with 46 lakes
-
-#      AIC      BIC   logLik deviance df.resid 
-#      212      227     -100      200       84 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance Std.Dev.
-#  fLake  (Intercept) 0.02031  0.1425  
-# Number of obs: 90, groups:  fLake, 45
-# 
-# Dispersion parameter for compois family (): 0.193 
-# 
-# Conditional model:
-#             Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)  1.39898    0.04431  31.576  < 2e-16 ***
-# PeriodP2    -0.13480    0.05835  -2.310  0.02087 *  
-# logFlow.std  0.11023    0.03642   3.027  0.00247 ** 
-# aDepth.std   0.24434    0.03799   6.432 1.26e-10 ***
-
-#or if we include PC species 
-CMP3 <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + PC +
+                          compois(link = "sqrt"),
+                          data = amp)
+# just add the PC crustaceans
+AM2_pc <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + PC +
                           (1|fLake),
-                           compois(link = "sqrt"),
-                           data = amp)
+                          compois(link = "sqrt"),
+                          data = amp)
+AIC(AM2, AM2_pc)
 
-summary(CMP3)
+```
 
-## MAssive change in AIC compared to CMP2
-# Formula:          Rel_amp ~ Period + logFlow.std + aDepth.std + PC + (1 | fLake)
-# Data: amp
-# 
-#      AIC      BIC   logLik deviance df.resid 
-#    367.5    383.4   -176.8    353.5       64 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance Std.Dev.
-#  fLake  (Intercept) 0.9897   0.9948  
-# Number of obs: 71, groups:  fLake, 26
-# 
-# Dispersion parameter for compois family (): 1.62 
-# 
-# Conditional model:
-#              Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)  0.868192   0.215439   4.030 5.58e-05 ***
-# PeriodP2     0.041293   0.166930   0.247    0.805    
-# logFlow.std -0.037741   0.208591  -0.181    0.856    
-# aDepth.std   0.006943   0.209693   0.033    0.974    
-# PCpresent    1.259619   0.241983   5.205 1.94e-07 ***
+## Sensitivity analyses: full data set
+
+```{r}
+## Now for sensitivity analyses we repeat same analyses with the full data set 
+AM1_f <- glmmTMB(Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC +
+                          (1|fLake),
+                          compois(link = "log"),
+                          data = ampFull)
+drop1(AM1_f)
+
+#             Df    AIC
+# <none>         218.60
+# Period       1 218.18
+# logFlow.std  1 224.50
+# logArea.std  1 217.24
+# aDepth.std   1 246.06
+# PC           1 217.05 <- drop
+
+#we can do the same with the maximum depth 
+AM1max_f <- glmmTMB(Rel_amp ~ Period + logFlow.std + logArea.std + mDepth.std + PC +
+                          (1|fLake),
+                          compois(link = "log"),
+                          data = ampFull)
+drop1(AM1max_f)
+#             Df    AIC
+# <none>         224.54
+# Period       1 224.29
+# logFlow.std  1 229.10
+# logArea.std  1 222.56
+# mDepth.std   1 246.06
+# PC           1 222.56 <- drop this or log Area (identical values). Again average depth gives lower AIC so we go with that
+
+#continue with the average depth model after dropping Ponto-Caspian crustaceans 
+
+AM1a_f <- glmmTMB(Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std +
+                 (1|fLake),
+               compois(link = "log"),
+               data = ampFull)
+
+drop1(AM1a_f)
+
+#             Df    AIC
+# <none>         217.05
+# Period       1 218.56
+# logFlow.std  1 222.52
+# logArea.std  1 215.49 <- drop
+# aDepth.std   1 244.06
+
+AM1b_f <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std +
+                  (1|fLake),
+                compois(link = "log"),
+                data = ampFull)
+
+drop1(AM1b_f)
+
+#             Df    AIC
+# <none>         215.49 <- cannot improve fit by dropping further variables
+# Period       1 216.70
+# logFlow.std  1 220.59
+# aDepth.std   1 242.15
+
+# Improve fit with different link function?
+AM1c_f <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std +
+                          (1|fLake),
+                          compois(link = "sqrt"),
+                          data = ampFull)
+
+AIC(AM1b_f, AM1c_f)
+#      df      AIC
+# AM1b  6 215.488
+# AM1c  6 211.997 <- better fit
+
+# The optimal model is
+AM2_f <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + 
+                          (1|fLake),
+                          compois(link = "sqrt"),
+                          data = ampFull)
+```
+
+## Sensitivity analyses: three lakes removed
+
+```{r}
+## repeat same analyses with three lakes dropped 
+
+AM1_t <- glmmTMB(Rel_amp ~ Period + logFlow.std + logArea.std + aDepth.std + PC +
+                          (1|fLake),
+                          compois(link = "log"),
+                          data = ampTest)
+
+drop1(AM1_t)
+
+#this was original data without three lakes dropped (not the full dataset)
+#             Df    AIC
+# <none>         188.51
+# Period       1 188.79
+# logFlow.std  1 191.16
+# logArea.std  1 186.54 <- drop
+# aDepth.std   1 203.28
+# PC           1 186.68 <- this one is also very close in terms of their AIC value
+#this is the model with three lakes removed
+#             Df    AIC
+# <none>         177.90
+# Period       1 177.62
+# logFlow.std  1 179.78
+# logArea.std  1 175.91 <- drop
+# aDepth.std   1 191.78
+# PC           1 176.32 <- this one is also very close in terms of their AIC value
+
+AM1a_t <- glmmTMB(Rel_amp ~ Period + logFlow.std + PC + aDepth.std +
+                 (1|fLake),
+               compois(link = "log"),
+               data = ampTest)
+
+drop1(AM1a_t)
+#original
+#             Df    AIC
+# <none>         186.54
+# Period       1 186.93
+# logFlow.std  1 190.04
+# PC           1 184.68 <- drop
+# aDepth.std   1 202.11
+#without three lakes
+#             Df    AIC
+# <none>         175.91
+# Period       1 175.69
+# logFlow.std  1 178.54
+# PC           1 174.33 <- drop
+# aDepth.std   1 190.61
+
+AM1b_t <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std +
+                  (1|fLake),
+                compois(link = "log"),
+                data = ampTest)
+
+drop1(AM1b_t)
+#original
+#             Df    AIC
+# <none>         184.68 <- cannot improve fit by dropping further variables as this value is lowest
+# Period       1 186.81
+# logFlow.std  1 188.04
+# aDepth.std   1 200.11
+#three lakes removed 
+#             Df    AIC
+# <none>         174.33 <- cannot improve fit by dropping further variables as this value is lowest
+# Period       1 176.04
+# logFlow.std  1 176.62
+# aDepth.std   1 188.67
+
+# Improve fit with different link function?
+AM1c_t <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std +
+                          (1|fLake),
+                          compois(link = "sqrt"),
+                          data = ampTest)
+
+AIC(AM1b_t, AM1c_t)
+#        df      AIC
+# AM1b_t  6 174.3343
+# AM1c_t  6 169.5850 <- better fit
+
+# The optimal model is
+AM2_t <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + 
+                          (1|fLake),
+                          compois(link = "sqrt"),
+                          data = ampTest)
 
 
 
+```
+
+## Model exploration 
+
+```{r}
 # Plot the residuals vs fitted values.
 par(mfrow = c(1,1), mar = c(5,5,2,2))
-E1 <- resid(CMP2, type = "pearson")
-F1 <- fitted(CMP2)
+E1 <- resid(AM2, type = "pearson")
+F1 <- fitted(AM2)
 plot(x = F1, 
      y = E1,
      xlab = "Fitted values",
@@ -510,15 +647,7 @@ abline(0,0, lty=2)
 # They are fine
 
 # Variables not in the model
-par(mfrow = c(1,3), mar = c(5,5,2,2))
-
-# Plot the residuals vs ave depth
-plot(x = amp$mDepth.std, 
-     y = E1,
-     xlab = "Standardised max depth",
-     ylab = "Pearson residuals", 
-     pch = 16, cex.lab = 1.5)
-abline(0,0, lty=2)
+par(mfrow = c(1,2), mar = c(5,5,2,2))
 
 # Plot the residuals vs area
 plot(x = amp$logArea.std, 
@@ -529,7 +658,7 @@ plot(x = amp$logArea.std,
 abline(0,0, lty=2)
 # OK
 
-#Period
+#PC
 boxplot(E1 ~ PC, data = amp,
         xlab = "PC",
         ylab = "",
@@ -546,25 +675,25 @@ V1 <- variogram(E1 ~ 1, mydata, cutoff = 2)
 plot(V1, pch = 16, col = 1, cex = 1.5,
      xlab = list(label = "Distance", cex = 1.5),
      ylab = list(label = "Semi-variance", cex = 1.5) )
-# No obvious spatial trend
+# No strong spatial trend
 
 ```
 
-### Plot model 
+## Plot model 
 
 ```{r}
 # Plot fixed effects
 set_theme(
   base = theme_bw(),
   axis.textsize = 1)
-plot_model(CMP2, vline.color = "red", 
+plot_model(AM2, vline.color = "red", 
            sort.est = FALSE, 
            show.values = TRUE)
 # Good
 
 # Random effects
-plot_model(CMP2, vline.color = "green", type = "re")
-# Quite limited lake effects
+plot_model(AM2, vline.color = "green", type = "re")
+# OK
 
 # Model predictions
 set_theme(
@@ -574,7 +703,7 @@ set_theme(
   axis.textsize.y = 0.5,
   axis.linecolor = "black", 
   axis.textcolor = "black",
-  axis.tickslen = 0.2,
+  axis.tickslen = 0,
   axis.title.size = 0.9,
   axis.title.color = "black",
   axis.textsize = 0.8,
@@ -597,38 +726,48 @@ My_theme <- theme(panel.background = element_blank(),
 
 
 # Plot model
+AM2 <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + 
+                        (1|fLake),
+                        compois(link = "sqrt"),
+                        data = amp)
 
 # log flow
-plot2 <- plot_model(CMP2,
+plot1 <- plot_model(AM2,
                     type = "pred", 
                     terms = c("logFlow.std [all]", "Period"),
-                    colors = c("blue", "firebrick2", "green2"),
+                    colors = c("blue", "firebrick2"),
                     show.data = T,
                     pred.type = c("fe"),
+                    scale_y_continuous(limits = c(1,3)),
                     title = "",
-                    show.legend = TRUE,
-                    jitter = 0.5,
+                    show.legend = F,
+                    jitter = 0.2,
                     axis.title = c("Log flowthrough (standardised)",
-                                   "Relative abundance of glacial relict amphipods"),
-                    show.values = F) + My_theme
+                                   "Relative abundance of relic amphipods"),
+                    show.values = F) + My_theme +
+  scale_y_continuous(limits = c(0, 5), breaks = c(0, 1, 2, 3, 4))
+
 # average depth
-plot3 <- plot_model(CMP2,
+plot2 <- plot_model(AM2,
                     type = "pred", 
                     terms = c("aDepth.std [all]", "Period"),
-                    colors = c("blue", "firebrick2", "green2"),
+                    colors = c("blue", "firebrick2"),
                     show.data = T,
                     pred.type = c("fe"),
+                    scale_y_continuous(limits = c(1,3)),
                     title = "",
-                    show.legend = TRUE,
-                    jitter = 0.5,
+                    show.legend = F,
+                    jitter = 0.2,
                     axis.title = c("Average depth (standardised)",
                                    ""),
-                    show.values = F) + My_theme
+                    show.values = F) + My_theme +
+  scale_y_continuous(limits = c(0, 5), breaks = c(0, 1, 2, 3, 4)) +
+  scale_x_continuous(limits = c(-1.9, 2.6), breaks = c(-1.9, -0.4, 1.1, 2.6)) 
 
-grid.arrange(plot2, plot3, nrow = 1)
+grid.arrange(plot1, plot2, nrow = 1)
 
 # Model summary
-summary(CMP2)
+summary(AM2)
 
 #              Estimate Std. Error z value Pr(>|z|)    
 #(Intercept)   1.39898    0.04431  31.576  < 2e-16 ***
@@ -636,15 +775,15 @@ summary(CMP2)
 # logFlow.std  0.11023    0.03642   3.027  0.00247 ** 
 # aDepth.std   0.24434    0.03799   6.432 1.26e-10 ***
 
-tab_model(CMP2,
+tab_model(AM2,
           show.zeroinf = F,
-          dv.labels = c("Conway-Maxwell Poisson GLMM (relic amphipods)"),
+          dv.labels = c("Conway-Maxwell Poisson GLMM (relic amphipod)"),
           string.pred = "Coefficient",
           string.ci = "Conf. Int (95%)",
           string.p = "P-value",
           p.style = c("numeric"),
           emph.p = FALSE,
           transform = NULL,
-          file = "amp.doc")
+          file = "amphipod_model.doc")
 
 ```

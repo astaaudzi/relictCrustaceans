@@ -1,8 +1,10 @@
 ---
-title: "Reliktai"
-author: "Augustas"
+title: "Plotting distributions of relict crustaceans"
+author: "Asta A et al."
 date: '2022-11-04'
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ## Libraries
@@ -23,11 +25,13 @@ library(purrr)
 library(lubridate)
 library(tidyverse)
 library(ggpubr)
-
-pacman::p_load(
-    ggsn, #to add scale bars
-    #mapview, # to save maps from leaflet
-    cowplot, rnaturalearth, tidyverse,here, skimr, sf, leaflet, mapview, readxl, ggmap, effects, MuMIn, grid)
+library(gridExtra)
+#devtools::install_github("ropensci/rnaturalearthhires")
+library(rnaturalearthhires)
+# pacman::p_load(
+#     ggsn, #to add scale bars
+#     #mapview, # to save maps from leaflet
+#     cowplot, rnaturalearth, tidyverse,here, skimr, sf, leaflet, mapview, readxl, ggmap, effects, MuMIn, grid)
 
 ```
 
@@ -38,63 +42,155 @@ pacman::p_load(
 relict <-read.csv("relictData.csv")
 
 #Define the box and download a map
-bbox <- c(left = 21, bottom = 53.5, right = 27, top = 56.5)
-#stamen2 <- get_stamenmap(bbox, zoom = 7, maptype = "terrain-background", color = "bw", force = TRUE)
-#saveRDS(stamen, file = 'lithuania.rds')
-#saveRDS(stamen2, file = 'lithuania2.rds')
+# bbox <- c(left = 21, bottom = 53.5, right = 27, top = 56.5)
+# stamen2 <- get_stamenmap(bbox, zoom = 7, maptype = "terrain-background", color = "bw", force = TRUE)
+# saveRDS(stamen, file = 'lithuania.rds')
+# saveRDS(stamen2, file = 'lithuania2.rds')
 
-read_rds(file = 'lithuania2.rds')
+# stamen2 <- read_rds(file = 'lithuania2.rds')
 
 ```
+
+## Map Lithuania
+
+```{r}
+# download the shapefiles for all countries, major cities, and lakes
+lt <- ne_countries(scale = "large", country = c("lithuania","latvia", "belarus", "poland", "russia"), returnclass = "sf")
+
+options("download.file.method" = "libcurl")
+cities <- ne_download(category = "cultural", type = "populated_places", returnclass = "sf", scale = 10)
+#rnaturalearth::ne_download(scale = "medium", type = "urban_areas", category = "cultural", returnclass = "sf")
+
+
+# lakes<- ne_download(scale = 10, type = 'rivers_lake_centerlines', category = 'physical', returnclass = "sf")
+countries10 <- ne_download(scale = 10, type = 'countries', category = 'cultural', returnclass = "sf")
+
+# filter the spatial objects to include only data for Lithuania
+lt_cities <- cities %>% filter(ADM0NAME == "Lithuania")
+# lt_lakes <- lakes %>% filter( == "Lithuania")
+# lt_rivers_lakes <- st_intersection(lt, lakes)
+
+
+# plot lithuania map with cities and lakes
+p <- ggplot() +
+  geom_sf(data = lt, fill = "white", color = "black", lwd = 5.5) +
+  # geom_sf(data = lt_rivers_lakes, fill = "lightblue", color = "blue") +
+  geom_sf(data = lt_cities, color = "black", size = 2, shape = 3) +
+  geom_sf_text(data = lt_cities, aes(label = NAME),
+               color = "black", size = 2, nudge_x = 0.1, nudge_y = 0.1) +
+  scale_x_continuous(name = NULL) +
+  scale_y_continuous(name = NULL) +
+  coord_sf(xlim = c(20.75, 27), ylim = c(53.8, 56.5))
+```
+
+## Map Europe
+
+```{r}
+world <- ne_download(category = "cultural", 
+                      type = "admin_0_countries", 
+                      scale = "large",
+                      returnclass = "sf")
+europe <- subset(world, CONTINENT == "Europe")
+
+lt_square <- data.frame(
+  lon = c(20.75, 27),
+  lat = c(53.8, 56.5)
+)
+
+europe_map <- ggplot(europe) + 
+  geom_sf(fill = "white", color = "gray50") + 
+  coord_sf(xlim = c(1,35), ylim = c(42,67), expand = FALSE) +
+    geom_rect(data = lt_square, aes(xmin = lon[1], xmax = lon[2], ymin = lat[1], ymax = lat[2]),
+            fill = NA, color = "black", linewidth = 1) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = .5,size = 5)) +
+  ggtitle("D) Map of Central Europe")
+europe_map
+
+ggsave(europe_map, filename = "astaBugPlot/europe.png", units = "px", width = 750, height = 750)
+
+
+
+```
+
+
+## dataframe and theme setup
+
+```{r}
+plot_dat <- reshape2::melt(relict[,c(3:5,7,8)],id.vars = c("Lat","Lon"))
+plot_dat <- plot_dat %>% mutate(variable = case_when(
+  variable == "Mrelicta" ~ "A) Mysis relicta",
+  variable == "Maffinis" ~ "B) Monoporeia affinis",
+  variable == "Pallasea" ~ "C) Pallaseopsis quadrispinosa"))
+plot_dat <- plot_dat[!plot_dat$value == 0,] 
+plot_dat$value[plot_dat$value == 1] <- "absent"
+plot_dat$value[plot_dat$value == 2] <- "present"
+plot_dat$value[plot_dat$value == 9] <- "unknown"
+
+colnames(plot_dat) <- c("Latitude","Longitude","Species","Presence")
+
+myTheme <- function(){
+    theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x =element_text(size=8),
+    axis.text.y =element_text(size=8),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "italic"),
+    legend.position = "bottom"
+  )
+}
+```
+
+## facet wrap
+
+```{r}
+relicta <- p +   
+  geom_point(data= plot_dat, 
+             aes(x = Longitude, y = Latitude, color= Presence), 
+             size = 2) +
+  facet_wrap(~Species, ncol = 2) +
+  scale_color_manual(values = c("black", "orange", "lightblue"),
+                     labels=c("absent", "present", "unknown")) +
+myTheme()
+relicta
+
+```
+
+## image overlay
 
 ```{r}
 
-#filter data sets
-relict$Pallasea <- as.factor(relict$Pallasea)
-m_relicta <- relict %>% filter(Mrelicta > 0) 
-m_relicta$Mrelicta <- as.factor(m_relicta$Mrelicta)
-monoporeia <- relict %>% filter(Maffinis == 1)
+# capture the plot as an image
+myPlot <- image_graph(width = 2000, height = 2000, res = 200)
+print(relicta)
+dev.off()
 
-p1 <- ggmap(stamen2)
-p1
+# read in the image to overlay
+mysis <- image_read("astaBugPlot/Mysis.tif")
+mysis <- image_scale(mysis, "20%")
 
-relicta <- p1 +   
- geom_point(data= m_relicta, aes(x = Lon, y = Lat, color= Mrelicta), shape=16, size = 2) +
-      scale_color_manual(values = c("black", "orange"),
-                     labels=c("absent", "present"),
-                     guides(name = "Mysis:")) +
- geom_text(x=22.8, y=53.7, label= "M. relicta, M. affinis", size = 5, fontface = 3) + 
- geom_point(data= monoporeia, aes(x = Lon, y = Lat), shape=8, size = 2) +
- #  theme_bw() +
-  theme(
-    panel.grid.major = element_blank(), 
-    panel.grid.minor = element_blank(),
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank(),
-    axis.text.x =element_blank(),
-    axis.text.y =element_text(size=8)
-  )
-relicta
+mono <- image_read("astaBugPlot/Monoporeia.tif")
+mono <- image_scale(mono, "20%")
 
-pallasea <- p1 +   
- geom_point(data= relict, aes(x = Lon, y = Lat, color= Pallasea), shape=16, size = 2) +
-      scale_color_manual(values = c("black", "orange", "lightblue"),
-                     labels=c("absent", "present", "unknown")) +
- geom_text(x=22.5, y=53.7, label= "P. quadrispinosa", size = 5, fontface = 3) + 
- #  theme_bw() +
-  theme(
-    panel.grid.major = element_blank(), 
-    panel.grid.minor = element_blank(),
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank(),
-    axis.text=element_text(size=8)
-  )
-pallasea
+palla <- image_read("astaBugPlot/Pallaseopsis.tif")
+palla <- image_scale(palla, "20%")
 
-ggarrange(relicta, pallasea,
-          labels = c("A", "B"),
-          ncol = 1, nrow = 2)
+europe <- image_read("astaBugPLot/europe.png")
+
+# overlay the image on the plot
+myPlot <- image_composite(myPlot, mysis, offset = "+100+750")
+myPlot <- image_composite(myPlot, mono, offset = "+1100+700")
+myPlot <- image_composite(myPlot, palla, offset = "+100+1550")
+myPlot <- image_composite(myPlot, europe, offset = "+1100+950")
+
+
+image_write(myPlot, path = "astaBugPlot/Fig1.png", format = "png")
 
 
 ```
+
+
 
