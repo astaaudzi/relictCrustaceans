@@ -291,6 +291,7 @@ Next steps:
 
 ```{r}
 # 1. log transform flow and area to improve distribution
+mys$fLake <- as.factor(mys$Lake_abbr)
 mys$logArea <- log10(mys$Area)
 mys$logFlow <- log10(mys$Flow)
 
@@ -539,7 +540,7 @@ set_theme(
   axis.tickslen = 0,
   axis.title.size = 0.9,
   axis.title.color = "black",
-  axis.textsize = 0.8,
+  axis.textsize = 0.9,
   geom.outline.size = 1,
   legend.pos = "bottom",
   legend.title.face = "italic",
@@ -557,10 +558,9 @@ My_theme <- theme(panel.background = element_blank(),
                   panel.grid.major = element_line(colour = "white", size = 0.1),
                   panel.grid.minor = element_line(colour = "white", size = 0.1))
 
-
 # Plot model
-plot2 <- plot_model(MY2,
-                    type = "pred", 
+
+plot_model(MY2, type = "pred", 
                     terms = c("logFlow.std [all]", "Period"),
                     colors = c("blue", "firebrick2"),
                     show.data = T,
@@ -568,22 +568,38 @@ plot2 <- plot_model(MY2,
                     scale_y_continuous(limits = c(1,3)),
                     title = "",
                     show.legend = F,
-                    jitter = 0.2,
-                    axis.title = c("",
-                                   ""),
-                    show.values = F) + My_theme
+                    jitter = 0.1,
+                    axis.title = c("Standardised water renewal rate",
+                                   "Categorical abundance of relict mysids"),
+                    show.values = F) + My_theme + 
+  scale_y_continuous(limits = c(-0.5, 5.5), breaks = c(0, 1, 2, 3))
+
+# Run model without standardised variables for more intuitive plotting 
+MY2 <- glmmTMB(Rel_mys ~ Period + logFlow + 
+                         (1|fLake),
+                         compois(link = "sqrt"),
+                         data = mys)  
+
+# Plot model
+plot2 <- plot_model(MY2,
+                    type = "pred", 
+                    terms = c("logFlow [all]", "Period"),
+                    colors = c("blue", "firebrick2"),
+                    show.data = T,
+                    pred.type = c("fe"),
+                    scale_y_continuous(limits = c(1,3)),
+                    auto.label = F, 
+                    title = "",
+                    show.legend = F,
+                    jitter = 0.1,
+                    axis.title = c("Log10 annual water renewal rate",
+                                   "Categorical abundance of relict mysids"),
+                    show.values = F) + My_theme + 
+  scale_y_continuous(limits = c(-0.5, 5.5), breaks = c(0, 1, 2, 3)) 
                     
-grid.arrange(plot2, ncol = 2)
+grid.arrange(plot2, ncol = 1)
 
-
-# Model summary
-summary(MY2)
-
-#              Estimate Std. Error z value Pr(>|z|)    
-#(Intercept)   1.50288    0.09530  15.770  < 2e-16 ***
-# PeriodP2    -0.28359    0.08921  -3.179  0.00148 ** 
-# logFlow.std  0.23142    0.08646   2.677  0.00744 ** 
-
+#write the model table
 tab_model(MY2,
           show.zeroinf = F,
           dv.labels = c("Conway-Maxwell Poisson GLMM (relic mysid)"),

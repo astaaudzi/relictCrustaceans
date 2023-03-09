@@ -107,7 +107,7 @@ europe_map <- ggplot(europe) +
   ggtitle("D) Map of Central Europe")
 europe_map
 
-ggsave(europe_map, filename = "astaBugPlot/europe.png", units = "px", width = 750, height = 750)
+ggsave(europe_map, filename = "europe.png", units = "px", width = 750, height = 750)
 
 
 
@@ -169,25 +169,25 @@ print(relicta)
 dev.off()
 
 # read in the image to overlay
-mysis <- image_read("astaBugPlot/Mysis.tif")
+mysis <- image_read("Mysis.tif")
 mysis <- image_scale(mysis, "20%")
 
-mono <- image_read("astaBugPlot/Monoporeia.tif")
+mono <- image_read("Monoporeia.tif")
 mono <- image_scale(mono, "20%")
 
-palla <- image_read("astaBugPlot/Pallaseopsis.tif")
+palla <- image_read("Pallaseopsis.tif")
 palla <- image_scale(palla, "20%")
 
-europe <- image_read("astaBugPLot/europe.png")
+europe <- image_read("europe.png")
 
 # overlay the image on the plot
 myPlot <- image_composite(myPlot, mysis, offset = "+100+750")
 myPlot <- image_composite(myPlot, mono, offset = "+1100+700")
 myPlot <- image_composite(myPlot, palla, offset = "+100+1550")
 myPlot <- image_composite(myPlot, europe, offset = "+1100+950")
+myPlot
 
-
-image_write(myPlot, path = "astaBugPlot/Fig1.png", format = "png")
+image_write(myPlot, path = "Fig1.png", format = "png")
 
 
 ```
