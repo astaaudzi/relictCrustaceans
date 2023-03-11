@@ -46,6 +46,7 @@ glimpse(amp)
 
 ## But I think we need to repeat the analysis only with lakes that have been checked in 21st century. So we filter the dataset
 checkedLakes <- unique(amp$Lake_code[which(amp$Period == "P2")])
+checkedLakes <- unique(amp$Lake_code[which(amp$PeriodStrict == "P2")])
 
 ampFull <- amp
 amp <- ampFull %>% filter (Lake_code %in% checkedLakes)
@@ -425,6 +426,7 @@ AM2 <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std +
                           (1|fLake),
                           compois(link = "sqrt"),
                           data = amp)
+summary(AM2)
 # just add the PC crustaceans
 AM2_pc <- glmmTMB(Rel_amp ~ Period + logFlow.std + aDepth.std + PC +
                           (1|fLake),
