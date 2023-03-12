@@ -515,7 +515,11 @@ plot(V1, pch = 16, col = 1, cex = 1.5,
 ## Plot model 
 
 ```{r}
-
+# The optimal model is:
+MY2 <- glmmTMB(Rel_mys ~ Period + logFlow.std + 
+                          (1|fLake),
+                           compois(link = "sqrt"),
+                           data = mys) 
 # Plot fixed effects
 set_theme(
   base = theme_bw(),
@@ -524,6 +528,8 @@ plot_model(MY2, vline.color = "red",
            sort.est = FALSE, 
            show.values = TRUE)
 # Good
+
+
 
 # Random effects
 plot_model(MY2, vline.color = "green", type = "re")
@@ -559,7 +565,6 @@ My_theme <- theme(panel.background = element_blank(),
                   panel.grid.minor = element_line(colour = "white", size = 0.1))
 
 # Plot model
-
 plot_model(MY2, type = "pred", 
                     terms = c("logFlow.std [all]", "Period"),
                     colors = c("blue", "firebrick2"),
@@ -569,33 +574,35 @@ plot_model(MY2, type = "pred",
                     title = "",
                     show.legend = F,
                     jitter = 0.1,
-                    axis.title = c("Standardised water renewal rate",
+                    axis.title = c("Mean standardized Log10 annual water renewal rate",
                                    "Categorical abundance of relict mysids"),
                     show.values = F) + My_theme + 
   scale_y_continuous(limits = c(-0.5, 5.5), breaks = c(0, 1, 2, 3))
 
-# Run model without standardised variables for more intuitive plotting 
-MY2 <- glmmTMB(Rel_mys ~ Period + logFlow + 
-                         (1|fLake),
-                         compois(link = "sqrt"),
-                         data = mys)  
 
-# Plot model
-plot2 <- plot_model(MY2,
-                    type = "pred", 
-                    terms = c("logFlow [all]", "Period"),
-                    colors = c("blue", "firebrick2"),
-                    show.data = T,
-                    pred.type = c("fe"),
-                    scale_y_continuous(limits = c(1,3)),
-                    auto.label = F, 
-                    title = "",
-                    show.legend = F,
-                    jitter = 0.1,
-                    axis.title = c("Log10 annual water renewal rate",
-                                   "Categorical abundance of relict mysids"),
-                    show.values = F) + My_theme + 
-  scale_y_continuous(limits = c(-0.5, 5.5), breaks = c(0, 1, 2, 3)) 
+
+# # Run model without standardised variables for more intuitive plotting 
+# MY2 <- glmmTMB(Rel_mys ~ Period + logFlow + 
+#                          (1|fLake),
+#                          compois(link = "sqrt"),
+#                          data = mys)  
+# 
+# # Plot model
+# plot2 <- plot_model(MY2,
+#                     type = "pred", 
+#                     terms = c("logFlow [all]", "Period"),
+#                     colors = c("blue", "firebrick2"),
+#                     show.data = T,
+#                     pred.type = c("fe"),
+#                     scale_y_continuous(limits = c(1,3)),
+#                     auto.label = F, 
+#                     title = "",
+#                     show.legend = F,
+#                     jitter = 0.1,
+#                     axis.title = c("Log10 annual water renewal rate",
+#                                    "Categorical abundance of relict mysids"),
+#                     show.values = F) + My_theme + 
+#   scale_y_continuous(limits = c(-0.5, 5.5), breaks = c(0, 1, 2, 3)) 
                     
 grid.arrange(plot2, ncol = 1)
 
