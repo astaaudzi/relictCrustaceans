@@ -1,7 +1,7 @@
 # relictCrustaceans
 Analysis of "glacial relict" crustacean distributions in Lithuania 
 
-The anaysis presented here is currently under review in a manuscript "Does the Ice Age legacy end in Central Europe? The shrinking distributions of glacial relict crustaceans" by K Arbaciauskas, C Smith, A Audzijonyte
+The anaysis presented here is currently under review in a manuscript "Does the Ice Age legacy end in Central Europe? The shrinking distributions of glacial relict crustaceans in Lithuania" by A Audzijonyte, K Arbaciauskas, C Smith
 
 A preprint of this work can be found [here](https://www.biorxiv.org/content/10.1101/2022.11.23.517644v1.abstract)
 
