@@ -44,20 +44,20 @@ library(DHARMa)
 amp <- read_csv(file = "amp_clean.csv")
 glimpse(amp)
 
-#originally Period 2 included some last years from the 20th century for a better data balance (the division between the two periods is rather arbitrary), but because this may look like data manipulation, we now use century strictly. Results are anyway the same, although the data balance between the two periods is now not as good. 
+#originally Period 1 and 2 were set to ensure good balance between the data (45 data points in each period). This is now modified to ensure that period 1 and 2 strictly follow years of 20th and 21st centuries, so we are using the column $PeriodStrict instead of $Period. Model selection and results are the same, although the data balance between the two periods is not as good with the strict definition. But the subdivision does not seem as arbitrary. 
+
 amp$Period <- amp$PeriodStrict
 
-## various sensitivity analyses 
+## various sensitivity analyses were also conducted, e.g. only with lakes that were sampled in both 20th and 21st centuries. Again, results are the same, so full details are not included. 
 # checkedLakes <- unique(amp$Lake_code[which(amp$Period == "P2")])
 # checkedLakes <- unique(amp$Lake_code[which(amp$PeriodStrict == "P2")])
 # 
 # ampFull <- amp
 # amp <- ampFull %>% filter (Lake_code %in% checkedLakes)
-# 
-# length(unique(amp$Lake_code))
+# # length(unique(amp$Lake_code))
 # glimpse(amp)
 
-#three lakes checked with handnet only
+#three lakes checked with handnet only, for further sensitivity analyses
 three_lakes <- c("Gals", "Galv","Vist")
 
 
@@ -118,7 +118,7 @@ grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3)
 # Are data balanced among levels of the categorical covariates?
 
 amp$fLake <- as.factor(amp$Lake_abbr)
-ampFull$fLake <- as.factor(ampFull$Lake_abbr)
+#ampFull$fLake <- as.factor(ampFull$Lake_abbr)
 table(amp$fLake)
 # OK
 
@@ -311,8 +311,8 @@ amp$fLake <- as.factor(amp$Lake_abbr)
 amp$logArea <- log10(amp$Area)
 amp$logFlow <- log10(amp$Flow)
 
-ampFull$logArea <- log10(ampFull$Area)
-ampFull$logFlow <- log10(ampFull$Flow)
+# ampFull$logArea <- log10(ampFull$Area)
+# ampFull$logFlow <- log10(ampFull$Flow)
 
 p1 <- multi_dotplot(amp, order, Area)
 p2 <- multi_dotplot(amp, order, logArea)
@@ -333,11 +333,11 @@ amp$logArea.std <- (amp$logArea-mean(amp$logArea))/sd(amp$logArea)
 amp$aDepth.std  <- (amp$Depth_ave-mean(amp$Depth_ave))/sd(amp$Depth_ave)
 amp$mDepth.std  <- (amp$Depth_max-mean(amp$Depth_max))/sd(amp$Depth_max)
 
-ampFull$Year.std    <- (ampFull$Year-mean(ampFull$Year))/sd(ampFull$Year)
-ampFull$logFlow.std <- (ampFull$logFlow-mean(ampFull$logFlow))/sd(ampFull$logFlow)
-ampFull$logArea.std <- (ampFull$logArea-mean(ampFull$logArea))/sd(ampFull$logArea)
-ampFull$aDepth.std  <- (ampFull$Depth_ave-mean(ampFull$Depth_ave))/sd(ampFull$Depth_ave)
-ampFull$mDepth.std  <- (ampFull$Depth_max-mean(ampFull$Depth_max))/sd(ampFull$Depth_max)
+# ampFull$Year.std    <- (ampFull$Year-mean(ampFull$Year))/sd(ampFull$Year)
+# ampFull$logFlow.std <- (ampFull$logFlow-mean(ampFull$logFlow))/sd(ampFull$logFlow)
+# ampFull$logArea.std <- (ampFull$logArea-mean(ampFull$logArea))/sd(ampFull$logArea)
+# ampFull$aDepth.std  <- (ampFull$Depth_ave-mean(ampFull$Depth_ave))/sd(ampFull$Depth_ave)
+# ampFull$mDepth.std  <- (ampFull$Depth_max-mean(ampFull$Depth_max))/sd(ampFull$Depth_max)
 dim(amp)
 dim(ampFull)
 

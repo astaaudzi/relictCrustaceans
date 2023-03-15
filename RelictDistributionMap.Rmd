@@ -56,17 +56,13 @@ relict <-read.csv("relictData.csv")
 ```{r}
 # download the shapefiles for all countries, major cities, and lakes
 lt <- ne_countries(scale = "large", country = c("lithuania","latvia", "belarus", "poland", "russia"), returnclass = "sf")
-
-options("download.file.method" = "libcurl")
 cities <- ne_download(category = "cultural", type = "populated_places", returnclass = "sf", scale = 10)
-#rnaturalearth::ne_download(scale = "medium", type = "urban_areas", category = "cultural", returnclass = "sf")
-
-
 # lakes<- ne_download(scale = 10, type = 'rivers_lake_centerlines', category = 'physical', returnclass = "sf")
-countries10 <- ne_download(scale = 10, type = 'countries', category = 'cultural', returnclass = "sf")
+
 
 # filter the spatial objects to include only data for Lithuania
 lt_cities <- cities %>% filter(ADM0NAME == "Lithuania")
+lt_cities$NAME[1] <- "Panev\u0117žys"
 # lt_lakes <- lakes %>% filter( == "Lithuania")
 # lt_rivers_lakes <- st_intersection(lt, lakes)
 
@@ -77,7 +73,7 @@ p <- ggplot() +
   # geom_sf(data = lt_rivers_lakes, fill = "lightblue", color = "blue") +
   geom_sf(data = lt_cities, color = "black", size = 2, shape = 3) +
   geom_sf_text(data = lt_cities, aes(label = NAME),
-               color = "black", size = 2, nudge_x = 0.1, nudge_y = 0.1) +
+               color = "black", size = 1.5, nudge_x = 0.1, nudge_y = 0.2) +
   scale_x_continuous(name = NULL) +
   scale_y_continuous(name = NULL) +
   coord_sf(xlim = c(20.75, 27), ylim = c(53.8, 56.5))
@@ -98,16 +94,16 @@ lt_square <- data.frame(
 )
 
 europe_map <- ggplot(europe) + 
-  geom_sf(fill = "white", color = "gray50") + 
+  geom_sf(fill = "white", color = "gray50", linewidth = .75) + 
   coord_sf(xlim = c(1,35), ylim = c(42,67), expand = FALSE) +
     geom_rect(data = lt_square, aes(xmin = lon[1], xmax = lon[2], ymin = lat[1], ymax = lat[2]),
-            fill = NA, color = "black", linewidth = 1) +
-  theme_void() +
-  theme(plot.title = element_text(hjust = .5,size = 5)) +
-  ggtitle("D) Map of Central Europe")
+            fill = NA, color = "orange", linewidth = .5) +
+  theme_void()
+  # theme(plot.title = element_text(hjust = .5,size = 5)) +
+  # ggtitle("D) Map of Central Europe")
 europe_map
 
-ggsave(europe_map, filename = "europe.png", units = "px", width = 750, height = 750)
+ggsave(europe_map, filename = "europe.png", units = "px", width = 1250, height = 1250)
 
 
 
@@ -135,8 +131,8 @@ myTheme <- function(){
     panel.grid.minor = element_blank(),
     axis.title.x = element_blank(),
     axis.title.y = element_blank(),
-    axis.text.x =element_text(size=8),
-    axis.text.y =element_text(size=8),
+    axis.text.x =element_text(size=7),
+    axis.text.y =element_text(size=7),
     strip.background = element_blank(),
     strip.text = element_text(face = "italic"),
     legend.position = "bottom"
@@ -150,7 +146,7 @@ myTheme <- function(){
 relicta <- p +   
   geom_point(data= plot_dat, 
              aes(x = Longitude, y = Latitude, color= Presence), 
-             size = 2) +
+             size = 1.5) +
   facet_wrap(~Species, ncol = 2) +
   scale_color_manual(values = c("black", "orange", "lightblue"),
                      labels=c("absent", "present", "unknown")) +
@@ -164,30 +160,31 @@ relicta
 ```{r}
 
 # capture the plot as an image
-myPlot <- image_graph(width = 2000, height = 2000, res = 200)
+myPlot <- image_graph(width = 3200, height = 3200, res = 600)
 print(relicta)
 dev.off()
 
 # read in the image to overlay
 mysis <- image_read("Mysis.tif")
-mysis <- image_scale(mysis, "20%")
+mysis <- image_scale(mysis, "35%")
 
 mono <- image_read("Monoporeia.tif")
-mono <- image_scale(mono, "20%")
+mono <- image_scale(mono, "40%")
 
 palla <- image_read("Pallaseopsis.tif")
-palla <- image_scale(palla, "20%")
+palla <- image_scale(palla, "40%")
 
 europe <- image_read("europe.png")
 
 # overlay the image on the plot
-myPlot <- image_composite(myPlot, mysis, offset = "+100+750")
-myPlot <- image_composite(myPlot, mono, offset = "+1100+700")
-myPlot <- image_composite(myPlot, palla, offset = "+100+1550")
-myPlot <- image_composite(myPlot, europe, offset = "+1100+950")
-myPlot
+myPlot <- image_composite(myPlot, mysis, offset = "+250+1000") #was +300+1000
+myPlot <- image_composite(myPlot, mono, offset = "+1800+950")
+myPlot <- image_composite(myPlot, palla, offset = "+350+2400")
+myPlot <- image_composite(myPlot, europe, offset = "+1750+1550")
 
-image_write(myPlot, path = "Fig1.png", format = "png")
+
+image_write(myPlot, path = "Fig1_revised.png", format = "png")
+image_write(myPlot, path = "Fig1_revised.jpg", format = "jpeg", quality = 100)
 
 
 ```
